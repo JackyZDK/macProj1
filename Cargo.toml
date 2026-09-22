@@ -1,0 +1,18 @@
+[package]
+name = "nicmgr"
+version = "0.1.0"
+edition = "2021"
+description = "Mac/Win 网卡管理器：显示物理网卡状态/IP/子网掩码，支持启停控制与操作日志"
+
+[dependencies]
+eframe = "0.29"
+libc = "0.2"
+
+[target.'cfg(unix)'.dependencies]
+nix = { version = "0.29", features = ["net", "ioctl"] }
+
+[target.'cfg(windows)'.dependencies]
+if-addrs = "0.13"
+
+[profile.release]
+opt-level = 2
