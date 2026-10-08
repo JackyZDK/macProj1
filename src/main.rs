@@ -4,6 +4,8 @@ mod app;
 mod log;
 mod net;
 mod netctl;
+mod scripts;
+mod theme;
 
 use eframe::egui;
 
@@ -102,6 +104,75 @@ fn main() -> eframe::Result<()> {
         return Ok(());
     }
 
+    // 命令行模式：--scr <list|add|delete|run|view>，脚本管理的无 GUI 验证入口。
+    if std::env::args().nth(1).as_deref() == Some("--scr") {
+        match std::env::args().nth(2).as_deref() {
+            Some("list") => {
+                let items = scripts::list_scripts();
+                if items.is_empty() {
+                    println!("（暂无脚本，目录: {}", scripts::scripts_dir().display());
+                }
+                for s in &items {
+                    println!(
+                        "{:<12} root={:<5} {}",
+                        s.name,
+                        s.needs_root,
+                        s.path.display()
+                    );
+                }
+            }
+            Some("add") => {
+                // 用法: --scr add <name> <0|1> < <scriptfile>（内容读 stdin）
+                let name = std::env::args().nth(3).unwrap_or_default();
+                let needs_root = std::env::args().nth(4).as_deref() == Some("1");
+                let mut content = String::new();
+                use std::io::Read;
+                if std::io::stdin().read_to_string(&mut content).is_err() {
+                    eprintln!("读取脚本内容失败");
+                    std::process::exit(2);
+                }
+                match scripts::add_script(&name, &content, needs_root) {
+                    Ok(desc) => println!("OK: {}", desc),
+                    Err(e) => {
+                        eprintln!("ERROR: {}", e);
+                        std::process::exit(1);
+                    }
+                }
+            }
+            Some("delete") => {
+                let name = std::env::args().nth(3).unwrap_or_default();
+                match scripts::delete_script(&name) {
+                    Ok(desc) => println!("OK: {}", desc),
+                    Err(e) => {
+                        eprintln!("ERROR: {}", e);
+                        std::process::exit(1);
+                    }
+                }
+            }
+            Some("run") => {
+                let name = std::env::args().nth(3).unwrap_or_default();
+                match scripts::list_scripts().into_iter().find(|s| s.name == name) {
+                    Some(item) => match scripts::run_script(&item) {
+                        Ok(desc) => println!("OK: {}", desc),
+                        Err(e) => {
+                            eprintln!("ERROR: {}", e);
+                            std::process::exit(1);
+                        }
+                    },
+                    None => {
+                        eprintln!("脚本 {} 不存在", name);
+                        std::process::exit(1);
+                    }
+                }
+            }
+            _ => {
+                eprintln!("用法: nicmgr --scr <list|add <name> <0|1> < <file>|delete <name>|run <name>>");
+                std::process::exit(2);
+            }
+        }
+        return Ok(());
+    }
+
     let options = eframe::NativeOptions {
         viewport: egui::ViewportBuilder::default()
             .with_inner_size([860.0, 600.0])
@@ -122,6 +193,7 @@ fn main() -> eframe::Result<()> {
         options,
         Box::new(move |cc| {
             setup_fonts(&cc.egui_ctx);
+            theme::apply(&cc.egui_ctx);
             Ok(Box::new(app::NetApp::new_with_logs(logs)))
         }),
     )
